@@ -1,0 +1,138 @@
+version: '3'
+services:
+# consul:
+#    image: "consul:1.15.4"
+#    ports:
+#      - 8500:8500
+ mysql:
+   image: "mysql:latest"
+   ports:
+     - 3307:3306
+   environment:
+     - MYSQL_ROOT_PASSWORD=123456
+   volumes:
+     - ./db/sql/ini:/docker-entrypoint-initdb.d
+   healthcheck:
+     test: ["CMD","mysqladmin","ping","-h","localhost","-u","root","-proot"]
+     interval: 15s
+     timeout: 10s
+     retries: 5
+     start_period: 1m
+ redis:
+   image: "redis:latest"
+   ports:
+     - 6380:6379
+ consul:
+     image: consul:1.15.4
+     network_mode: host  # 使用宿主机的网络栈
+     volumes:
+       - ./data:/consul/data  # 持久化 Consul 数据
+     command: agent -dev -client=0.0.0.0  # 允许外部访问
+ nats:
+   image: nats:latest
+   ports:
+     - "4222:4222"
+     - "8222:8222"
+ prometheus:
+   image: prom/prometheus:latest
+   volumes:
+     - ./deploy/config/prometheus.yml:/etc/prometheus/prometheus.yml
+     - ./deploy/config/alert_rules.yml:/etc/prometheus/alert_rules.yml
+   command:
+     - "--config.file=/etc/prometheus/prometheus.yml"
+   ports:
+     - "9090:9090"
+ grafana:
+   image: grafana/grafana:latest
+   environment:
+     - GF_AUTH_ANONYMOUS_ENABLED=true
+     - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+     - GF_AUTH_DISABLE_LOGIN_FORM=true
+   ports:
+     - "3000:3000"
+ jaeger-all-in-one:
+   container_name: jaeger-all-in-one
+   image: jaegertracing/all-in-one:latest
+   ports:
+     - "16686:16686"
+     - "4317:4317"
+     - "4318:4318"
+ loki:
+   image: grafana/loki:2.9.2
+   volumes:
+     - ./deploy/config/loki.yml:/etc/loki/local-config.yaml
+   command: -config.file=/etc/loki/local-config.yaml
+   ports:
+     - "3100:3100"
+
+ promtail:
+   image: grafana/promtail:2.9.2
+   volumes:
+     - ./deploy/config/promtail.yml:/etc/promtail/config.yml
+     - ./app/frontend/log:/logs/frontend
+   command: -config.file=/etc/promtail/config.yml
+ frontend:
+   build:
+     context: .
+     dockerfile: ./deploy/config/Dockerfile.frontend
+   ports:
+     - "8080:8080"
+   environment:
+     - OTEL_EXPORTER_OTLP_TRACES_ENDPOTNT=http://127.0.0.1:4317
+     - OTEL_EXPORTER_OTLP_INSECURE=true
+  #这个环境变量控制 OpenTelemetry 导出器是否使用加密的连接来发送数据。
+  #如果设置为 true，则表示使用不安全的（即未加密的）连接发送 OTLP 数据。
+     - SESSTON_SECRET=3BR9FODJFOT355
+     - GO_ENV=dev
+   depends_on:
+     - consul
+     - redis
+   volumes:
+     - ./app/frontend/conf/dev:/opt/gomall/frontend/conf/dev
+   #Prometheus：用于收集和存储时序数据（metrics）。
+   #Grafana：用于可视化 Prometheus 中的数据。
+   #Jaeger：用于分布式追踪。
+   #Loki：用于收集和聚合日志数据。
+   #Promtail：用于收集应用日志并发送到 Loki。
+ product:
+   build:
+     context: .
+     dockerfile: ./deploy/config/Dockerfile.svc
+     args:
+       - SVC=product
+   environment:
+     - MYSQL_USER=root
+     - MYSQL_PASSWORD=123456
+     - MYSQL_HOST=mysql
+     - GO_ENV=dev
+   depends_on:
+       consul:
+         condition: service_started
+       mysql:
+         condition: service_healthy
+
+   volumes:
+     - ./app/product/conf/dev:/opt/gomall/product/conf/dev
+
+
+#  curl -X PUT http://localhost:8500/v1/agent/service/register -d '{
+#"Name": "user",
+#"Address": "host.docker.internal",
+#"Port": 8888,
+#"Check": {
+#  "TCP": "host.docker.internal:8888",
+#  "Interval": "10s"
+#}
+#}'
+#
+#
+#  curl -X PUT http://localhost:8500/v1/agent/service/register -d '{
+#  "Name": "product",
+#  "Address": "host.docker.internal",
+#  "Port": 8887,
+#  "Check": {
+#    "TCP": "host.docker.internal:8887",
+#    "Interval": "10s"
+#  }
+#}'
+#

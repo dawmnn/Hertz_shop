@@ -1,0 +1,30 @@
+# config.yml
+server:
+  http_listen_port: 9080
+  #Promtail 将在 9080 端口监听 HTTP 请求。通常这是 Promtail 用于健康检查或其他管理操作的端口。
+  grpc_listen_port: 0
+#0 表示禁用 gRPC 监听端口，Promtail 不会启动 gRPC 服务。
+positions:
+  filename: /tmp/positions.yaml
+# /tmp/positions.yaml：Promtail 会记录已读取的日志的位置信息，以便在重新启动后可以继续从上次停止的地方读取日志。
+#这个位置信息会被保存在 /tmp/positions.yaml 文件中。
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+#Promtail 将日志数据推送到 Loki 的 3100 端口，即通过 http://loki:3100/loki/api/v1/push 接口发送日志数据。
+scrape_configs:
+  - job_name: hertz #定义了一个抓取任务，任务的名字为 hertz。
+    pipeline_stages: #定义了日志数据处理的管道阶段。Promtail 在抓取到日志后会对日志进行一系列处理
+      - json: #第一个处理阶段是将日志内容解析为 JSON 格式。
+          expressions:
+            level: level #从 JSON 日志中提取字段，这里是提取 level 字段。即如果日志中包含 level 字段，
+            #将其提取出来并为后续使用。
+      - labels:
+          level: #第二个处理阶段是将 level 字段作为标签添加到日志中。
+          #这意味着所有从这个任务中抓取到的日志将带有 level 标签，值为 JSON 中 level 字段的值。
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          app: frontend
+          __path__: /logs/frontend/hertz.log
+#指定要抓取的日志文件路径为 /logs/frontend/hertz.log。

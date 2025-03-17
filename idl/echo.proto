@@ -1,0 +1,21 @@
+syntax="proto3";
+
+package pbapi;
+
+option go_package="/pbapi";
+
+message Request{
+  string  message=1;
+}
+message Response{
+  string message =1;
+}
+
+service EchoService{
+  rpc Echo (Request) returns (Response) {}
+}
+//    这段定义了一个 RPC 服务，名为 EchoService。该服务有一个方法 Echo，
+//    它接受一个 Request 类型的消息，并返回一个 Response 类型的消息。
+//
+//    rpc Echo (Request) returns (Response) {}：这行表示 Echo 方法的功能：
+//    它接收一个 Request 消息作为输入，并返回一个 Response 消息作为输出。

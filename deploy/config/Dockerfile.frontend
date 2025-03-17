@@ -1,0 +1,31 @@
+FROM golang:1.23.2 AS builder
+
+WORKDIR /usr/src/gomall
+
+ENV GOPROXY=https://goproxy.io,direct
+# pre-copy/cache go.mod for pre-downloading dependencies and only redownloading them in subsequent builds if they change
+COPY ../../app/frontend/go.mod app/frontend/go.sum ./app/frontend/
+COPY ../../rpc_gen rpc_gen
+COPY ../../common common
+
+RUN cd app/frontend/ && go mod download && go mod verify
+
+COPY ../../app/frontend app/frontend
+RUN cd app/frontend/ && CGO_ENABLED=0 go build -v -o /opt/gomall/frontend/server
+
+FROM busybox
+#通过 COPY --from=builder，你将构建阶段（builder）生成的应用程序 server 拷贝到运行镜像中。
+#这样，最终镜像只包含应用程序及其运行所需的文件，而不包含构建过程中的工具（如 Go 编译器等）。
+#busybox 作为基础镜像，不包含 Go 工具链、源代码或者开发工具，极大减少了镜像的体积。
+
+COPY --from=builder /opt/gomall/frontend/server /opt/gomall/frontend/server
+
+COPY ../../app/frontend/conf /opt/gomall/frontend/conf
+COPY ../../app/frontend/static /opt/gomall/frontend/static
+COPY ../../app/frontend/template /opt/gomall/frontend/template
+
+WORKDIR /opt/gomall/frontend
+
+EXPOSE 8080
+
+CMD ["./server"]

@@ -1,0 +1,48 @@
+global:
+  scrape_interval: 15s
+#scrape_interval: 15s：这是 Prometheus 全局的抓取间隔，
+#表示 Prometheus 每 15 秒钟会去抓取一次所有被配置的目标的数据。
+scrape_configs:
+  - job_name: "consul"#有一个名为 consul 的抓取任务（job_name: "consul"）。
+    consul_sd_configs: #表示使用 Consul 作为服务发现源。
+    #Prometheus 会通过 Consul 的 API 自动发现服务，并抓取其暴露的指标。
+      - server: consul:8500 #指定了 Consul 的地址（consul:8500）。
+      #这里假设 Prometheus 在网络中能访问到 Consul 服务，且 Consul 服务监听在 8500 端口。
+        services:
+          - prometheus #表示 Prometheus 会从 Consul 中查找名为 prometheus 的服务，并抓取该服务的指标。
+    relabel_configs:
+      - source_labels: [ __meta_consul_tags ] #指示 Prometheus 使用从 Consul 服务发现中得到的 __meta_consul_tags 标签。
+      #__meta_consul_tags 是 Consul 服务的元数据标签。
+        action: replace #这个动作表示要替换 target_label 标签的值。
+        target_label: service #
+        regex: ".*service:(.*?),.*" #这是一个正则表达式，
+        #表示从 __meta_consul_tags 中提取出符合格式 service:<value> 的部分，并把 <value> 提取出来。
+        replacement: "$1"
+
+      - source_labels: [ __meta_consul_service_id ] #指示 Prometheus 使用 Consul 服务发现中获取到的 __meta_consul_service_id 标签。
+        target_label: __metrics_path__ #将 __meta_consul_service_id 中的信息作为新的 __metrics_path__ 标签。
+        #__metrics_path__ 标签通常用于指示 Prometheus 从哪个路径抓取指标数据。
+        replacement: /metrics
+        #replacement 设置为 /metrics，意味着 Prometheus 会向服务的 /metrics 路径发送请求，
+        #来抓取该服务暴露的 Prometheus 格式的指标数据。
+  - job_name: 'blackbox'
+    metrics_path: /probe
+    params:
+      module: [ http_2xx ]  # Look for a HTTP 200 response.
+    static_configs:
+      - targets:
+          - http://localhost:8080 # Target to probe with http on port 8080.
+    relabel_configs:
+      - source_labels: [ __address__ ]
+        target_label: __param_target
+      - source_labels: [ __param_target ]
+        target_label: instance
+      - target_label: __address__
+        replacement: host.docker.internal:9115  # The blackbox exporter's real hostname:port.
+alerting:
+  alertmanagers:
+    - static_configs:
+      - targets:
+        - host.docker.internal:9093
+rule_files:
+  - "alert_rules.yml"

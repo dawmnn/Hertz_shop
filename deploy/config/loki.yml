@@ -1,0 +1,38 @@
+# config.yml
+auth_enabled: false
+#auth_enabled 设置为 false 表示禁用身份验证。Loki 在处理请求时不需要验证用户身份
+server:
+  http_listen_port: 3100
+  #：配置 Loki HTTP 服务的监听端口为 3100，用于接收 HTTP 请求（例如日志推送请求或查询请求）。
+  grpc_listen_port: 9096
+  #配置 Loki gRPC 服务的监听端口为 9096，用于接收 gRPC 请求。
+
+common:
+  instance_addr: 127.0.0.1 #配置 Loki 实例的地址，指明 Loki 实例运行在 127.0.0.1（即本机）。
+  path_prefix: /tmp/loki #配置 Loki 存储文件的基本路径为 /tmp/loki。所有数据、配置文件等都将存储在这个路径下。
+  storage:
+    filesystem:
+      chunks_directory: /tmp/loki/chunks
+      rules_directory: /tmp/loki/rules
+  replication_factor: 1 #配置 Loki 存储的副本数量为 1，表示没有进行数据的副本冗余，数据只存储一份。
+  ring:
+    kvstore:
+      store: inmemory
+#配置为使用内存中的键值存储，意味着 Loki 的状态信息（如服务发现、配置信息等）会保存在内存中，而不会持久化到磁盘。
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100 #缓存的最大大小设置为 100 MB。
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v11
+      index:
+        prefix: index_
+        period: 24h
+#每 24 小时创建一个新的索引文件，意味着日志数据会按天分隔，便于查询和管理。
